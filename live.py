@@ -1,16 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session , jsonify
 import sqlite3
 import subprocess
-import threading
-import os
-import random
 import requests
 import time
-from test_1 import *
+from test_1 import save_to_config_file , load_config_file , get_playlist_videos
 from dotenv import load_dotenv
-from music import *
-from down_yt import *
-from flask import Flask, render_template, request, jsonify
 import os
 import threading
 import yt_dlp
@@ -19,7 +13,6 @@ import random
 from queue import Queue
 from music import slowedreverb
 
-app = Flask(__name__)
 
 # Directories
 UPLOAD_DIR = "uploaded_files"
@@ -28,16 +21,46 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(REVERB_DIR, exist_ok=True)
 
 # Load playlist configuration
-PLAYLIST_FILE = "playlists2.config"
-try:
-    with open(PLAYLIST_FILE, "r") as f:
-        songs = [line.strip() for line in f.readlines()]
-except FileNotFoundError:
-    songs = []
+PLAYLIST_FILE = "playlists.config"
+
 
 # Shared state for progress tracking
 progress = {}
 queue = Queue()
+
+
+
+
+progress1 = {}
+queue1 = Queue()
+
+
+def convert_worker():
+    while True:
+        song_url, task_id = queue1.get()
+        if song_url is None:
+            break
+        progress1[task_id] = f"Downloading: {song_url}"
+        input_path = os.path.join(UPLOAD_DIR, song_url)
+        output_path = f"slowed_reverbed/{song_url}.wav"
+        result = slowedreverb(input_path, output_path)
+        if result:
+            progress1[task_id] = f"Downloaded: {result[1]}"
+        else:
+            progress1[task_id] = f"Failed: {song_url}"
+        queue1.task_done()
+
+
+NUM_THREADS = 4
+threads = []
+for _ in range(NUM_THREADS):
+    thread = threading.Thread(target=convert_worker, daemon=True)
+    thread.start()
+    threads.append(thread)
+
+
+
+
 
 # Function to download YouTube audio
 def download_youtube_audio(youtube_link):
@@ -351,7 +374,7 @@ def stop_stream():
 
 @app.route('/playlist')
 def index():
-    playlists = load_config_file(CONFIG_FILE_NAME)
+    playlists = load_config_file(PLAYLIST_FILE)
     return render_template('index.html', playlists=playlists)
 
 
@@ -367,11 +390,11 @@ def add_playlist():
     else:
         return redirect(url_for('index'))
 
-    playlists = load_config_file(CONFIG_FILE_NAME)
+    playlists = load_config_file(PLAYLIST_FILE)
     if playlist_id not in playlists:
         try:
             playlists[playlist_id] = get_playlist_videos(playlist_id)
-            save_to_config_file(CONFIG_FILE_NAME, playlists)
+            save_to_config_file(PLAYLIST_FILE, playlists)
         except Exception as e:
             print(f"Error adding playlist: {e}")
     return redirect(url_for('index'))
@@ -379,16 +402,16 @@ def add_playlist():
 
 @app.route('/delete_playlist/<playlist_id>', methods=['POST'])
 def delete_playlist(playlist_id):
-    playlists = load_config_file(CONFIG_FILE_NAME)
+    playlists = load_config_file(PLAYLIST_FILE)
     if playlist_id in playlists:
         del playlists[playlist_id]
-        save_to_config_file(CONFIG_FILE_NAME, playlists)
+        save_to_config_file(PLAYLIST_FILE, playlists)
     return redirect(url_for('index'))
 
 
 @app.route('/delete_video/<playlist_id>/<video_id>', methods=['POST'])
 def delete_video(playlist_id, video_id):
-    playlists = load_config_file(CONFIG_FILE_NAME)
+    playlists = load_config_file(PLAYLIST_FILE)
     if playlist_id in playlists:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         if video_url in playlists[playlist_id]:
@@ -396,17 +419,29 @@ def delete_video(playlist_id, video_id):
             # If the playlist becomes empty, remove it
             if not playlists[playlist_id]:
                 del playlists[playlist_id]
-            save_to_config_file(CONFIG_FILE_NAME, playlists)
+            save_to_config_file(PLAYLIST_FILE, playlists)
     return redirect(url_for('index'))
 
 
 
 @app.route('/youtube')
 def youtube():
+    try:
+        with open(PLAYLIST_FILE, "r") as f:
+            songs = [line.strip() for line in f.readlines()]
+            f.close()
+    except FileNotFoundError:
+        songs = []
     return render_template('youtube.html', songs=songs)
 
 @app.route('/download_all', methods=['POST'])
 def download_all():
+    try:
+        with open(PLAYLIST_FILE, "r") as f:
+            songs = [line.strip() for line in f.readlines()]
+            f.close()
+    except FileNotFoundError:
+        songs = []
     task_id = str(uuid.uuid4())
     for song_url in songs:
         queue.put((song_url, task_id))
@@ -433,16 +468,22 @@ def list_songs():
 def convert():
     files = os.listdir(REVERB_DIR)
     songs = [os.path.join(REVERB_DIR, f) for f in files if os.path.isfile(os.path.join(REVERB_DIR, f))]
-    
-    def convert_worker():
-        files = os.listdir(UPLOAD_DIR)
-        for file in files:
-            
-            input_path = os.path.join(UPLOAD_DIR, file)
-            output_path = f"slowed_reverbed/{file}.wav"
-            slowedreverb(input_path, output_path)
-    threading.Thread(target=convert_worker, daemon=True).start()
     return render_template('convert.html', files=songs)
+
+
+@app.route('/convert_start', methods=['POST'])
+def convert_all_to_reverb():
+    try:
+        files1 = os.listdir(UPLOAD_DIR)  # List all items in the directory
+        songs1 = [f for f in files1 if os.path.isfile(os.path.join(UPLOAD_DIR, f))]  # Filter for files only
+    except FileNotFoundError:
+        songs1 = []  # If the directory doesn't exist, assign an empty list
+
+
+    task_id = str(uuid.uuid4())
+    for song_url in songs1:
+        queue1.put((song_url, task_id))
+    return jsonify({"task_id": task_id})
 
 
 @app.route('/delete', methods=['POST'])
@@ -481,7 +522,6 @@ def delete_all_converted():
 
 
 if __name__ == '__main__':
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
     init_db()
     port = 5000
     app.run(host='0.0.0.0', port=port, debug=True)

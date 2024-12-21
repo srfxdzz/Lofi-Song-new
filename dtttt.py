@@ -44,7 +44,7 @@ for playlist_id in playlist_ids:
     playlist_data[playlist_id] = get_playlist_videos(playlist_id)
 
 # Save the playlist data to a .config file
-config_file_name = "playlists2.config"
+config_file_name = "playlists.config"
 save_to_config_file(config_file_name, playlist_data)
 
 print(f"Data saved to {config_file_name}")

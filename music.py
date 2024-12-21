@@ -3,7 +3,6 @@ import soundfile as sf
 from pedalboard import Pedalboard, Reverb
 from math import trunc
 import numpy as np
-from down_yt import *
 
 def slowedreverb(audio, output, room_size = 0.75, damping = 0.5, wet_level = 0.08, dry_level = 0.2, delay = 2, slowfactor = 0.08):
 

@@ -7,7 +7,6 @@ app = Flask(__name__)
 YOUTUBE_API_KEY = 'AIzaSyBp_u_E0-xaDwSNJk4saicZD32OiscgQFY'
 YOUTUBE_API_SERVICE_NAME = 'youtube'
 YOUTUBE_API_VERSION = 'v3'
-CONFIG_FILE_NAME = "playlists.config"
 
 def get_playlist_videos(playlist_id):
     youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=YOUTUBE_API_KEY)
@@ -40,6 +39,7 @@ def save_to_config_file(file_name, data):
             configfile.write(f"[{playlist_id}]\n")
             for link in video_links:
                 configfile.write(f"{link}\n")
+        configfile.close()
 
 def load_config_file(file_name):
     if not os.path.exists(file_name):
@@ -56,6 +56,10 @@ def load_config_file(file_name):
                 data[current_playlist] = []
             elif current_playlist and line:
                 data[current_playlist].append(line)
+
+        configfile.close()
+
+        
     return data
 
 

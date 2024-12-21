@@ -33,22 +33,3 @@ def isDownlaodable(youtube_link):
     else:
         return False
 
-
-
-
-
-songs = open("playlists2.config","r").readlines()
-
-
-def get_random_song():
-    while True:
-        song_url = random.choice(songs)
-        os = download_youtube_audio(song_url)
-
-        if os == None:
-            pass
-        else:
-            return os
-
-
-        
